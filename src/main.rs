@@ -1,11 +1,21 @@
 use reqwest::{Client, Error};
 use dotenv::dotenv;
-use std::env;
 use serde_json::Value;
 use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use urlencoding::encode;
-use std::fs;
+use std::{fs, io, env};
+use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
+use ratatui::{
+    buffer::Buffer,
+    layout::{Constraint, Layout, Rect},
+    style::Stylize,
+    symbols::border,
+    text::{Line, Text},
+    widgets::{Block, Paragraph, Widget},
+    DefaultTerminal, Frame,
+};
+
 
 #[derive(Serialize, Deserialize, Debug)]
 struct Period {
@@ -40,6 +50,66 @@ struct OpenMeteoPeriod {
     date: String,
     weather_code: String
 }
+
+#[derive(Debug, Default)]
+pub struct App {
+    exit: bool
+}
+
+
+impl App {
+    /// Runs the application's main loop until the user quits
+    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+        while !self.exit {
+            terminal.draw(|frame| self.draw(frame))?;
+            self.handle_events()?;
+        }
+        Ok(())
+    }
+
+    fn draw(&self, frame: &mut Frame) {
+        use Constraint::{Fill, Length, Min};
+
+        let vertical = Layout::vertical([Length(1), Min(0),Length(1)]);
+        let [title_area, main_area, status_area] = vertical.areas(frame.area());
+        let horizontal = Layout::horizontal([Fill(1); 2]);
+        let [left_area, right_area] = horizontal.areas(main_area);
+
+        frame.render_widget(Block::bordered().title("Title Bar"), title_area);
+        frame.render_widget(Block::bordered().title("Status Bar"), status_area);
+        frame.render_widget(Block::bordered().title("Left"), left_area);
+        frame.render_widget(Block::bordered().title("Right"), right_area);
+    }
+
+    /// Updates the application's state based on user input
+    fn handle_events(&mut self) -> io::Result<()> {
+        match event::read()? {
+            // it's important to check that the event is a key press event as
+            // crossterm also emits key release and repeat events on Windows.
+            Event::Key(key_event) if key_event.kind == KeyEventKind::Press => {
+                self.handle_key_event(key_event)
+            }
+            _ => {}
+        };
+        Ok(())
+    }
+
+    fn handle_key_event(&mut self, key_event: KeyEvent) {
+        match key_event.code {
+            KeyCode::Char('q') => self.exit(),
+            _ => {}
+        }
+    }
+
+    fn exit(&mut self) {
+        self.exit = true;
+    }
+}
+
+
+
+
+
 
 
 
@@ -99,8 +169,11 @@ async fn getNoaaWeatherPeriods(client: &Client) -> Result<Vec<Period>, Error> {
 
 
 
+
+
+
 #[tokio::main]
-async fn main() -> Result<(), Error> {
+async fn main() -> io::Result<()> {
 
     dotenv().ok();
 
@@ -110,7 +183,7 @@ async fn main() -> Result<(), Error> {
         
     let client = Client::builder()
         .user_agent(user_agent)
-        .build()?;
+        .build().unwrap();
 
 
     //let periods = getNoaaWeatherPeriods(&client).await.unwrap();
@@ -121,5 +194,11 @@ async fn main() -> Result<(), Error> {
         println!("{i:?}");
     }
 
-    Ok(())
+    
+    // Initialize the TUI
+    let mut terminal = ratatui::init();
+    let app_result = App::default().run(&mut terminal);
+    // Restore the terminal before we leave
+    ratatui::restore();
+    app_result
 }
