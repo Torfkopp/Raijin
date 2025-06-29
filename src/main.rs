@@ -120,8 +120,8 @@ impl App {
         let current_weather = Layout::vertical([Ratio(1,2), Ratio(1,2)]);
         let [mut quick_stats, description] = current_weather.areas(current);
         
-        let container = Layout::vertical([Ratio(1,1)]);
-        let [smol] = container.areas(quick_stats);
+        //let container = Layout::vertical([Ratio(1,1)]);
+        //let [smol] = container.areas(quick_stats);
 
         frame.render_widget(Block::bordered().title("Upcoming Week"), forecast_area);
         frame.render_widget(Block::bordered(), icon);
@@ -158,23 +158,23 @@ impl App {
         ];
 
 
-        let table = Table::new(stats_rows, stats_widths).column_spacing(1);
-                /*.block(
+        let table = Table::new(stats_rows, stats_widths).column_spacing(1)
+                .block(
                     Block::default()
                         .borders(Borders::ALL)
                         .padding(Padding::uniform(1))
                         .title("Right Now")
-                );*/
+                );
 
 
-        let thing = center(
+        /*let thing = center(
             smol,
             Constraint::Percentage(50),
             Constraint::Percentage(50),
-        );
+        );*/
 
-        frame.render_widget(Block::bordered().title("Right Now"), quick_stats);
-        frame.render_widget(table, thing);
+        //frame.render_widget(Block::bordered().title("Right Now"), quick_stats);
+        frame.render_widget(table, quick_stats);
     }
 
     /// Updates the application's state based on user input
@@ -248,7 +248,6 @@ fn readWeatherCodesFile() -> Value {
     let data = fs::read_to_string("./weather-codes.json").expect("Error reading in weather codes file");
     let json: serde_json::Value = serde_json::from_str(&data).expect("JSON was malformed");
 
-    //println!("{:?}", json["82"]);
     return json;
 }
 
@@ -293,7 +292,7 @@ async fn main() -> io::Result<()> {
     let today = noaaPeriods[0].detailedForecast.clone();
     // Get 14 day forecast as well as today's weather info
     let openMeteoForecast = getOpenMeteoWeather(&client).await.unwrap();
-    println!("{:?}", openMeteoForecast.periods[0]);
+    //println!("{:?}", openMeteoForecast.periods[0]);
 
     
     // Initialize the TUI
