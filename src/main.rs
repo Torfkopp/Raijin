@@ -8,11 +8,11 @@ use std::{fs, io, env};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     buffer::Buffer,
-    layout::{Constraint, Layout, Rect},
+    layout::{Constraint, Layout, Rect, Flex},
     style::Stylize,
     symbols::border,
     text::{Line, Text},
-    widgets::{Block, Paragraph, Widget, Borders, Wrap},
+    widgets::{Block, Paragraph, Widget, Borders, Wrap, Cell, Row, Table, Padding},
     prelude::{Alignment},
     DefaultTerminal, Frame,
 };
@@ -68,7 +68,7 @@ struct OpenMeteoRawForecast {
 #[derive(Serialize, Deserialize, Debug)]
 struct OpenMeteoPeriod {
     date: String,
-    weather_code: String
+    weather: String
 }
 
 /// Final, reformatted forecast with daily and current weather
@@ -77,6 +77,16 @@ struct OpenMeteoForecast {
     periods: Vec<OpenMeteoPeriod>,
     current: CurrentWeatherData
 }
+
+
+fn center(area: Rect, horizontal: Constraint, vertical: Constraint) -> Rect {
+    let [area] = Layout::horizontal([horizontal])
+        .flex(Flex::Center)
+        .areas(area);
+    let [area] = Layout::vertical([vertical]).flex(Flex::Center).areas(area);
+    area
+}
+
 
 #[derive(Debug, Default)]
 pub struct App {
@@ -107,17 +117,12 @@ impl App {
         let weee = Layout::horizontal([Ratio(1,3), Ratio(1,3), Ratio(1,3)]);
         let [current, icon, today] = weee.areas(today_area);
 
-        /*let outer_layout = Layout::default()
-            .direction(Direction::Vertical)
-            .constraints(vec![
-                Constraint::Percentage(50),
-                Constraint::Percentage(50),
-            ])
-            .split(frame.area());*/
+        let current_weather = Layout::vertical([Ratio(1,2), Ratio(1,2)]);
+        let [mut quick_stats, description] = current_weather.areas(current);
+
 
         frame.render_widget(Block::bordered().title("Today's Weather"), today_area);
         frame.render_widget(Block::bordered().title("Upcoming Week"), forecast_area);
-        frame.render_widget(Block::bordered().title("Right Now"), current);
         frame.render_widget(Block::bordered().title("Remaining Day"), today);
 
         frame.render_widget(
@@ -125,9 +130,43 @@ impl App {
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
-                        .title("Title")
+                        .title("Full Description")
+                        .padding(Padding::uniform(1))
                 )
-                , current);
+                , description);
+
+        let stats_widths = [
+            Constraint::Length(20),
+            Constraint::Length(50),
+        ];
+
+        let stats_rows = [
+            Row::new(vec![
+                Cell::from("Current Temp:"),//.style(styles.text_style),
+                Cell::from(format!("{:15}\u{00B0}", self.openMeteoForecast.current.temperature_2m)),//.style(styles.text_style),
+            ]),
+            Row::new(vec![
+                Cell::from("Feels Like:"),//.style(styles.text_style),
+                Cell::from(format!("{:15}\u{00B0}", self.openMeteoForecast.current.apparent_temperature)),//.style(styles.text_style),
+            ]),
+            Row::new(vec![
+                Cell::from("Weather Summary:"),//.style(styles.text_style),
+                Cell::from(format!("{:50}", self.openMeteoForecast.periods[0].weather)),//.style(styles.text_style),
+            ])
+        ];
+
+
+        let table = Table::new(stats_rows, stats_widths).column_spacing(1)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Right Now")
+                );
+
+
+
+        frame.render_widget(table, quick_stats);
+
     }
 
     /// Updates the application's state based on user input
@@ -157,6 +196,11 @@ impl App {
 
 
 
+fn getWeatherFromCode(code: String) -> String { 
+    let weather_codes = readWeatherCodesFile();
+
+    return weather_codes[code].to_string();
+}
 
 
 
@@ -182,7 +226,7 @@ async fn getOpenMeteoWeather(client: &Client) -> Result<OpenMeteoForecast, Error
     let mut periods: Vec<OpenMeteoPeriod> = Vec::new();
     let mut count: usize = 0;
     for i in &json.daily.time {
-        periods.push(OpenMeteoPeriod{date: i.to_string(), weather_code: json.daily.weather_code[count].to_string()});
+        periods.push(OpenMeteoPeriod{date: i.to_string(), weather: getWeatherFromCode(json.daily.weather_code[count].to_string())});
         count += 1;
     }
 
@@ -230,8 +274,6 @@ async fn main() -> io::Result<()> {
 
     dotenv().ok();
 
-    let weather_codes = readWeatherCodesFile();
-
     let user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:139.0) Gecko/20100101 Firefox/139.0";
         
     let client = Client::builder()
@@ -243,6 +285,7 @@ async fn main() -> io::Result<()> {
     let today = noaaPeriods[0].detailedForecast.clone();
     // Get 14 day forecast as well as today's weather info
     let openMeteoForecast = getOpenMeteoWeather(&client).await.unwrap();
+    println!("{:?}", openMeteoForecast.periods[0]);
 
     
     // Initialize the TUI
