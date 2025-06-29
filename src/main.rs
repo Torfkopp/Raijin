@@ -12,54 +12,85 @@ use ratatui::{
     style::Stylize,
     symbols::border,
     text::{Line, Text},
-    widgets::{Block, Paragraph, Widget},
+    widgets::{Block, Paragraph, Widget, Borders, Wrap},
+    prelude::{Alignment},
     DefaultTerminal, Frame,
 };
 
-
+/// Single day of weather forecast
 #[derive(Serialize, Deserialize, Debug)]
-struct Period {
+struct NoaaPeriod {
     number: i32,
     name: String,
     detailedForecast: String
 }
 
+/// Contains the next 7 days of morning/night weather
 #[derive(Serialize, Deserialize, Debug)]
-struct Properties {
-    periods: Vec<Period>
+struct NoaaProperties {
+    periods: Vec<NoaaPeriod>
 }
 
+/// Forecast from NOAA
 #[derive(Serialize, Deserialize, Debug)]
-struct Forecast {
-    properties: Properties
+struct NoaaForecast {
+    properties: NoaaProperties
 }
 
+/// Daily forecast data
 #[derive(Serialize, Deserialize, Debug)]
 struct OpenMeteoTimeAndCode {
     time: Vec<String>,
-    weather_code: Vec<i32>
+    weather_code: Vec<i32>,
+    temperature_2m_max: Vec<f32>,
+    temperature_2m_min: Vec<f32>,
+    apparent_temperature_max: Vec<f32>,
+    apparent_temperature_min: Vec<f32>,
+    precipitation_probability_mean: Vec<i32>
 }
 
+/// Today's weather data
+#[derive(Serialize, Deserialize, Debug, Default)]
+struct CurrentWeatherData {
+    temperature_2m: f32,
+    apparent_temperature: f32,
+    weather_code: i32
+}
+
+/// Combination forecast including daily and today
 #[derive(Serialize, Deserialize, Debug)]
-struct OpenMeteoForecast {
-    daily: OpenMeteoTimeAndCode
+struct OpenMeteoRawForecast {
+    daily: OpenMeteoTimeAndCode,
+    current: CurrentWeatherData
 }
 
+/// Single day/weather condition 
 #[derive(Serialize, Deserialize, Debug)]
 struct OpenMeteoPeriod {
     date: String,
     weather_code: String
 }
 
+/// Final, reformatted forecast with daily and current weather
+#[derive(Serialize, Deserialize, Debug, Default)]
+struct OpenMeteoForecast {
+    periods: Vec<OpenMeteoPeriod>,
+    current: CurrentWeatherData
+}
+
 #[derive(Debug, Default)]
 pub struct App {
+    openMeteoForecast: OpenMeteoForecast,
+    todaysWeatherDescription: String,
     exit: bool
 }
 
 
 impl App {
     /// Runs the application's main loop until the user quits
-    pub fn run(&mut self, terminal: &mut DefaultTerminal) -> io::Result<()> {
+    pub fn run(&mut self, terminal: &mut DefaultTerminal, forecast: OpenMeteoForecast, today: String) -> io::Result<()> {
+        self.openMeteoForecast = forecast;
+        self.todaysWeatherDescription = today;
         while !self.exit {
             terminal.draw(|frame| self.draw(frame))?;
             self.handle_events()?;
@@ -68,17 +99,35 @@ impl App {
     }
 
     fn draw(&self, frame: &mut Frame) {
-        use Constraint::{Fill, Length, Min};
+        use Constraint::{Fill, Length, Min, Percentage, Ratio};
 
-        let vertical = Layout::vertical([Length(1), Min(0),Length(1)]);
-        let [title_area, main_area, status_area] = vertical.areas(frame.area());
-        let horizontal = Layout::horizontal([Fill(1); 2]);
-        let [left_area, right_area] = horizontal.areas(main_area);
+        let vertical = Layout::vertical([Percentage(50), Percentage(50)]);
+        let [today_area, forecast_area] = vertical.areas(frame.area());
+        
+        let weee = Layout::horizontal([Ratio(1,3), Ratio(1,3), Ratio(1,3)]);
+        let [current, icon, today] = weee.areas(today_area);
 
-        frame.render_widget(Block::bordered().title("Title Bar"), title_area);
-        frame.render_widget(Block::bordered().title("Status Bar"), status_area);
-        frame.render_widget(Block::bordered().title("Left"), left_area);
-        frame.render_widget(Block::bordered().title("Right"), right_area);
+        /*let outer_layout = Layout::default()
+            .direction(Direction::Vertical)
+            .constraints(vec![
+                Constraint::Percentage(50),
+                Constraint::Percentage(50),
+            ])
+            .split(frame.area());*/
+
+        frame.render_widget(Block::bordered().title("Today's Weather"), today_area);
+        frame.render_widget(Block::bordered().title("Upcoming Week"), forecast_area);
+        frame.render_widget(Block::bordered().title("Right Now"), current);
+        frame.render_widget(Block::bordered().title("Remaining Day"), today);
+
+        frame.render_widget(
+            Paragraph::new(self.todaysWeatherDescription.clone()).wrap(Wrap { trim: true }).alignment(Alignment::Center)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .title("Title")
+                )
+                , current);
     }
 
     /// Updates the application's state based on user input
@@ -112,21 +161,23 @@ impl App {
 
 
 
-
-async fn getOpenMeteoWeather(client: &Client) -> Result<Vec<OpenMeteoPeriod>, Error> {
+/// Get the forecast for the next 7 days as well as today's weather conditions
+/// Using this API: <https://api.open-meteo.com/v1/forecast>
+async fn getOpenMeteoWeather(client: &Client) -> Result<OpenMeteoForecast, Error> {
     let latitude = env::var("LATITUDE").unwrap();
     let longitude = env::var("LONGITUDE").unwrap();
     let mut timezone = env::var("TIMEZONE").unwrap().to_string();
     timezone = encode(&timezone).to_string();
-
+    
+    let mut url1 = format!("https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&daily=temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,weather_code,precipitation_probability_mean&current=temperature_2m,apparent_temperature,weather_code&timezone={}&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch", latitude.to_string(), longitude.to_string(), timezone);
     let mut url = format!("https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&daily=weather_code&current=weather_code,is_day&timezone={}&forecast_days=14&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch", latitude.to_string(), longitude.to_string(), timezone);
 
     let response = client
-        .get(url)
+        .get(url1)
         .send()
         .await?;
 
-    let json = response.json::<OpenMeteoForecast>().await?;
+    let json = response.json::<OpenMeteoRawForecast>().await?;
 
     let mut periods: Vec<OpenMeteoPeriod> = Vec::new();
     let mut count: usize = 0;
@@ -135,11 +186,12 @@ async fn getOpenMeteoWeather(client: &Client) -> Result<Vec<OpenMeteoPeriod>, Er
         count += 1;
     }
 
-    return Ok(periods);
+    return Ok(OpenMeteoForecast{periods: periods, current: json.current});
 }
 
 
-
+/// Read in the JSON file storing weather codes and associated condition
+/// Taken from: <https://open-meteo.com/en/docs#weather_variable_documentation>
 fn readWeatherCodesFile() -> Value {
     let data = fs::read_to_string("./weather-codes.json").expect("Error reading in weather codes file");
     let json: serde_json::Value = serde_json::from_str(&data).expect("JSON was malformed");
@@ -149,8 +201,9 @@ fn readWeatherCodesFile() -> Value {
 }
 
 
-
-async fn getNoaaWeatherPeriods(client: &Client) -> Result<Vec<Period>, Error> {
+/// Get the morning/night weather for the next 7 days (including today)
+/// Using this API: <https://api.weather.gov/>
+async fn getNoaaWeatherPeriods(client: &Client) -> Result<Vec<NoaaPeriod>, Error> {
     let state = env::var("STATE").unwrap();
     let zone = env::var("ZONE").unwrap();
     let url = format!("https://api.weather.gov/zones/{}/{}/forecast", state.to_string(), zone.to_string());
@@ -161,9 +214,9 @@ async fn getNoaaWeatherPeriods(client: &Client) -> Result<Vec<Period>, Error> {
         .await?;
     
     // Equivalent to:   let json: Forecast = response.json().await?;
-    let json = response.json::<Forecast>().await?;
+    let json = response.json::<NoaaForecast>().await?;
     
-    let periods: Vec<Period> = json.properties.periods;
+    let periods: Vec<NoaaPeriod> = json.properties.periods;
     return Ok(periods);
 }
 
@@ -185,19 +238,16 @@ async fn main() -> io::Result<()> {
         .user_agent(user_agent)
         .build().unwrap();
 
-
-    //let periods = getNoaaWeatherPeriods(&client).await.unwrap();
-    let periods = getOpenMeteoWeather(&client).await.unwrap();
-
-
-    for i in &periods {
-        println!("{i:?}");
-    }
+    
+    let noaaPeriods = getNoaaWeatherPeriods(&client).await.unwrap();
+    let today = noaaPeriods[0].detailedForecast.clone();
+    // Get 14 day forecast as well as today's weather info
+    let openMeteoForecast = getOpenMeteoWeather(&client).await.unwrap();
 
     
     // Initialize the TUI
     let mut terminal = ratatui::init();
-    let app_result = App::default().run(&mut terminal);
+    let app_result = App::default().run(&mut terminal, openMeteoForecast, today);
     // Restore the terminal before we leave
     ratatui::restore();
     app_result
