@@ -114,15 +114,17 @@ impl App {
         let vertical = Layout::vertical([Percentage(50), Percentage(50)]);
         let [today_area, forecast_area] = vertical.areas(frame.area());
         
-        let weee = Layout::horizontal([Ratio(1,3), Ratio(1,3), Ratio(1,3)]);
-        let [current, icon, today] = weee.areas(today_area);
+        let horizontal = Layout::horizontal([Ratio(1,3), Ratio(1,3), Ratio(1,3)]);
+        let [current, icon, today] = horizontal.areas(today_area);
 
         let current_weather = Layout::vertical([Ratio(1,2), Ratio(1,2)]);
         let [mut quick_stats, description] = current_weather.areas(current);
+        
+        let container = Layout::vertical([Ratio(1,1)]);
+        let [smol] = container.areas(quick_stats);
 
-
-        frame.render_widget(Block::bordered().title("Today's Weather"), today_area);
         frame.render_widget(Block::bordered().title("Upcoming Week"), forecast_area);
+        frame.render_widget(Block::bordered(), icon);
         frame.render_widget(Block::bordered().title("Remaining Day"), today);
 
         frame.render_widget(
@@ -136,37 +138,43 @@ impl App {
                 , description);
 
         let stats_widths = [
-            Constraint::Length(20),
-            Constraint::Length(50),
+            Constraint::Length(35),
+            Constraint::Length(35),
         ];
 
         let stats_rows = [
             Row::new(vec![
                 Cell::from("Current Temp:"),//.style(styles.text_style),
-                Cell::from(format!("{:15}\u{00B0}", self.openMeteoForecast.current.temperature_2m)),//.style(styles.text_style),
+                Cell::from(Text::from(format!("{}\u{00B0}", self.openMeteoForecast.current.temperature_2m)).right_aligned()),//.style(styles.text_style),
             ]),
             Row::new(vec![
                 Cell::from("Feels Like:"),//.style(styles.text_style),
-                Cell::from(format!("{:15}\u{00B0}", self.openMeteoForecast.current.apparent_temperature)),//.style(styles.text_style),
+                Cell::from(Text::from(format!("{}\u{00B0}", self.openMeteoForecast.current.apparent_temperature)).right_aligned()),//.style(styles.text_style),
             ]),
             Row::new(vec![
                 Cell::from("Weather Summary:"),//.style(styles.text_style),
-                Cell::from(format!("{:50}", self.openMeteoForecast.periods[0].weather)),//.style(styles.text_style),
+                Cell::from(Text::from(format!("{}", self.openMeteoForecast.periods[0].weather)).right_aligned()),//.style(styles.text_style),
             ])
         ];
 
 
-        let table = Table::new(stats_rows, stats_widths).column_spacing(1)
-                .block(
+        let table = Table::new(stats_rows, stats_widths).column_spacing(1);
+                /*.block(
                     Block::default()
                         .borders(Borders::ALL)
+                        .padding(Padding::uniform(1))
                         .title("Right Now")
-                );
+                );*/
 
 
+        let thing = center(
+            smol,
+            Constraint::Percentage(50),
+            Constraint::Percentage(50),
+        );
 
-        frame.render_widget(table, quick_stats);
-
+        frame.render_widget(Block::bordered().title("Right Now"), quick_stats);
+        frame.render_widget(table, thing);
     }
 
     /// Updates the application's state based on user input
