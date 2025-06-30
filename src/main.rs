@@ -9,10 +9,10 @@ use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
     buffer::Buffer,
     layout::{Constraint, Layout, Rect, Flex},
-    style::Stylize,
-    symbols::border,
+    style::{Stylize, Color, Style},
+    symbols::{border, Marker},
     text::{Line, Text},
-    widgets::{Block, Paragraph, Widget, Borders, Wrap, Cell, Row, Table, Padding},
+    widgets::{Block, Paragraph, Widget, Borders, Wrap, Cell, Row, Table, Padding, Axis, Chart, GraphType, Dataset},
     prelude::{Alignment},
     DefaultTerminal, Frame,
 };
@@ -49,6 +49,14 @@ struct OpenMeteoTimeAndCode {
     precipitation_probability_mean: Vec<i32>
 }
 
+/// Raw hourly data
+#[derive(Serialize, Deserialize, Debug)]
+struct OpenMeteoHourlyData {
+    time: Vec<String>,
+    weather_code: Vec<i32>,
+    temperature_2m: Vec<f32>
+}
+
 /// Today's weather data
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct CurrentWeatherData {
@@ -61,6 +69,7 @@ struct CurrentWeatherData {
 #[derive(Serialize, Deserialize, Debug)]
 struct OpenMeteoRawForecast {
     daily: OpenMeteoTimeAndCode,
+    hourly: OpenMeteoHourlyData,
     current: CurrentWeatherData
 }
 
@@ -68,6 +77,19 @@ struct OpenMeteoRawForecast {
 #[derive(Serialize, Deserialize, Debug)]
 struct OpenMeteoPeriod {
     date: String,
+    weather: String,
+    temperature_max: String,
+    temperature_min: String,
+    apparent_temperature_max: String,
+    apparent_temperature_min: String,
+    precipitation_probability: String,
+}
+
+/// Forecast data by the hour
+#[derive(Serialize, Deserialize, Debug)]
+struct OpenMeteoHourly {
+    datetime: String,
+    temperature: String,
     weather: String
 }
 
@@ -75,10 +97,13 @@ struct OpenMeteoPeriod {
 #[derive(Serialize, Deserialize, Debug, Default)]
 struct OpenMeteoForecast {
     periods: Vec<OpenMeteoPeriod>,
-    current: CurrentWeatherData
+    current: CurrentWeatherData,
+    hourly: Vec<OpenMeteoHourly>
 }
 
 
+
+/// Helper function to center a rect within another rect 
 fn center(area: Rect, horizontal: Constraint, vertical: Constraint) -> Rect {
     let [area] = Layout::horizontal([horizontal])
         .flex(Flex::Center)
@@ -86,6 +111,57 @@ fn center(area: Rect, horizontal: Constraint, vertical: Constraint) -> Rect {
     let [area] = Layout::vertical([vertical]).flex(Flex::Center).areas(area);
     area
 }
+
+
+fn render_scatter(frame: &mut Frame, area: Rect, hourly: &Vec<OpenMeteoHourly>) {
+    //let today_hourly = Vec::new();
+    let mut today_hourly: [(f64, f64); 24] = [(0., 0.); 24];
+    let mut count: usize = 0;
+    for i in hourly {
+        let time_split = i.datetime.split("T");
+        let time_pieces = time_split.collect::<Vec<_>>();
+        let hour_split = time_pieces[1].split(":");
+        let hour_pieces = hour_split.collect::<Vec<_>>();
+        let hour_as_float = hour_pieces[0].parse::<f64>().unwrap();
+        let mut temp_clone = i.temperature.clone();
+        temp_clone.pop();
+        let temp_as_float = temp_clone.parse::<f64>().unwrap();
+        today_hourly[count] = (hour_as_float, temp_as_float);
+        count += 1;
+        if count == 24 {
+            break;
+        }
+    }
+
+
+    let dataset = Dataset::default()
+            .name("Temp")
+            .marker(Marker::Dot)
+            .graph_type(GraphType::Scatter)
+            .style(Style::new().yellow())
+            .data(&today_hourly);
+
+    let chart = Chart::new(vec!(dataset))
+        .block(Block::bordered().title(Line::from("Today's Temps").cyan().centered().bold()))
+        .y_axis(
+            Axis::default()
+                .title("Temp")
+                .bounds([0., 120.])
+                .style(Style::default().fg(Color::Gray))
+                .labels(["0", "60", "120"]),
+        )
+        .x_axis(
+            Axis::default()
+                .title("Hour")
+                .bounds([0., 23.])
+                .style(Style::default().fg(Color::Gray))
+                .labels(["00:00", "06:00", "23:00"]),
+        )
+        .hidden_legend_constraints((Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)));
+
+    frame.render_widget(chart, area);
+}
+
 
 
 #[derive(Debug, Default)]
@@ -175,6 +251,7 @@ impl App {
 
         //frame.render_widget(Block::bordered().title("Right Now"), quick_stats);
         frame.render_widget(table, quick_stats);
+        render_scatter(frame, today, &self.openMeteoForecast.hourly);
     }
 
     /// Updates the application's state based on user input
@@ -221,11 +298,12 @@ async fn getOpenMeteoWeather(client: &Client) -> Result<OpenMeteoForecast, Error
     let mut timezone = env::var("TIMEZONE").unwrap().to_string();
     timezone = encode(&timezone).to_string();
     
-    let mut url1 = format!("https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&daily=temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,weather_code,precipitation_probability_mean&current=temperature_2m,apparent_temperature,weather_code&timezone={}&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch", latitude.to_string(), longitude.to_string(), timezone);
-    let mut url = format!("https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&daily=weather_code&current=weather_code,is_day&timezone={}&forecast_days=14&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch", latitude.to_string(), longitude.to_string(), timezone);
+    //let mut url = format!("https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&daily=temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,weather_code,precipitation_probability_mean&current=temperature_2m,apparent_temperature,weather_code&timezone={}&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch", latitude.to_string(), longitude.to_string(), timezone);
+    
+    let mut url = format!("https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&daily=temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,weather_code,precipitation_probability_mean&hourly=temperature_2m,weather_code&current=temperature_2m,apparent_temperature,weather_code&timezone={}&forecast_days=14&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch", latitude.to_string(), longitude.to_string(), timezone);
 
     let response = client
-        .get(url1)
+        .get(url)
         .send()
         .await?;
 
@@ -234,11 +312,30 @@ async fn getOpenMeteoWeather(client: &Client) -> Result<OpenMeteoForecast, Error
     let mut periods: Vec<OpenMeteoPeriod> = Vec::new();
     let mut count: usize = 0;
     for i in &json.daily.time {
-        periods.push(OpenMeteoPeriod{date: i.to_string(), weather: getWeatherFromCode(json.daily.weather_code[count].to_string())});
+        periods.push(OpenMeteoPeriod {
+            date: i.to_string(), 
+            weather: getWeatherFromCode(json.daily.weather_code[count].to_string()),
+            temperature_max: format!("{}\u{00B0}", json.daily.temperature_2m_max[count].to_string()),
+            temperature_min: format!("{}\u{00B0}", json.daily.temperature_2m_min[count].to_string()),
+            apparent_temperature_max: format!("{}\u{00B0}", json.daily.apparent_temperature_max[count].to_string()),
+            apparent_temperature_min: format!("{}\u{00B0}", json.daily.apparent_temperature_min[count].to_string()),
+            precipitation_probability: json.daily.precipitation_probability_mean[count].to_string()
+        });
         count += 1;
     }
 
-    return Ok(OpenMeteoForecast{periods: periods, current: json.current});
+    let mut hourly: Vec<OpenMeteoHourly> = Vec::new();
+    let mut count: usize = 0;
+    for i in &json.hourly.time {
+        hourly.push(OpenMeteoHourly {
+            datetime: i.to_string(),
+            temperature: format!("{}\u{00B0}", json.hourly.temperature_2m[count].to_string()),
+            weather: getWeatherFromCode(json.hourly.weather_code[count].to_string())
+        });
+        count += 1;
+    }
+
+    return Ok(OpenMeteoForecast{periods: periods, current: json.current, hourly: hourly});
 }
 
 
