@@ -74,6 +74,7 @@ struct OpenMeteoRawForecast {
 }
 
 /// Single day/weather condition 
+/// NOTE: Temperature values already include a degree symbol (U+00B0)
 #[derive(Serialize, Deserialize, Debug)]
 struct OpenMeteoPeriod {
     date: String,
@@ -112,9 +113,8 @@ fn center(area: Rect, horizontal: Constraint, vertical: Constraint) -> Rect {
     area
 }
 
-
-fn render_scatter(frame: &mut Frame, area: Rect, hourly: &Vec<OpenMeteoHourly>) {
-    //let today_hourly = Vec::new();
+/// Renders the scatterplot to show the temperature for the rest of the current day
+fn render_temperature_scatterplot(frame: &mut Frame, area: Rect, hourly: &Vec<OpenMeteoHourly>) {
     let mut today_hourly: [(f64, f64); 24] = [(0., 0.); 24];
     let mut count: usize = 0;
     for i in hourly {
@@ -135,7 +135,6 @@ fn render_scatter(frame: &mut Frame, area: Rect, hourly: &Vec<OpenMeteoHourly>) 
 
 
     let dataset = Dataset::default()
-            .name("Temp")
             .marker(Marker::Dot)
             .graph_type(GraphType::Scatter)
             .style(Style::new().yellow())
@@ -145,17 +144,17 @@ fn render_scatter(frame: &mut Frame, area: Rect, hourly: &Vec<OpenMeteoHourly>) 
         .block(Block::bordered().title(Line::from("Today's Temps").cyan().centered().bold()))
         .y_axis(
             Axis::default()
-                .title("Temp")
+                .title("Temp (\u{00B0}F)")
                 .bounds([0., 120.])
                 .style(Style::default().fg(Color::Gray))
-                .labels(["0", "60", "120"]),
+                .labels(["0", "30", "60", "90", "120"]),
         )
         .x_axis(
             Axis::default()
-                .title("Hour")
+                .title("Time (HH:MM)")
                 .bounds([0., 23.])
                 .style(Style::default().fg(Color::Gray))
-                .labels(["00:00", "06:00", "23:00"]),
+                .labels(["00:00", "06:00", "12:00", "18:00", "23:00"]),
         )
         .hidden_legend_constraints((Constraint::Ratio(1, 2), Constraint::Ratio(1, 2)));
 
@@ -196,19 +195,15 @@ impl App {
         let current_weather = Layout::vertical([Ratio(1,2), Ratio(1,2)]);
         let [mut quick_stats, description] = current_weather.areas(current);
         
-        //let container = Layout::vertical([Ratio(1,1)]);
-        //let [smol] = container.areas(quick_stats);
-
-        frame.render_widget(Block::bordered().title("Upcoming Week"), forecast_area);
+        frame.render_widget(Block::bordered().title(Line::from("Upcoming Week").light_magenta().centered().bold()), forecast_area);
         frame.render_widget(Block::bordered(), icon);
-        frame.render_widget(Block::bordered().title("Remaining Day"), today);
 
         frame.render_widget(
             Paragraph::new(self.todaysWeatherDescription.clone()).wrap(Wrap { trim: true }).alignment(Alignment::Center)
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
-                        .title("Full Description")
+                        .title(Line::from("Full Description").light_green().centered().bold())
                         .padding(Padding::uniform(1))
                 )
                 , description);
@@ -226,11 +221,23 @@ impl App {
             Row::new(vec![
                 Cell::from("Feels Like:"),//.style(styles.text_style),
                 Cell::from(Text::from(format!("{}\u{00B0}", self.openMeteoForecast.current.apparent_temperature)).right_aligned()),//.style(styles.text_style),
+            ]), 
+            Row::new(vec![
+                Cell::from("High:"),
+                Cell::from(Text::from(format!("{}", self.openMeteoForecast.periods[0].temperature_max)).right_aligned()),
+            ]),
+            Row::new(vec![
+                Cell::from("Low:"),
+                Cell::from(Text::from(format!("{}", self.openMeteoForecast.periods[0].temperature_min)).right_aligned()),
             ]),
             Row::new(vec![
                 Cell::from("Weather Summary:"),//.style(styles.text_style),
                 Cell::from(Text::from(format!("{}", self.openMeteoForecast.periods[0].weather)).right_aligned()),//.style(styles.text_style),
-            ])
+            ]),
+            Row::new(vec![
+                Cell::from("Chance of Rain:"),
+                Cell::from(Text::from(format!("{}%", self.openMeteoForecast.periods[0].precipitation_probability)).right_aligned()),
+            ]),
         ];
 
 
@@ -239,19 +246,12 @@ impl App {
                     Block::default()
                         .borders(Borders::ALL)
                         .padding(Padding::uniform(1))
-                        .title("Right Now")
+                        .title(Line::from("Right Now").light_blue().centered().bold())
                 );
 
 
-        /*let thing = center(
-            smol,
-            Constraint::Percentage(50),
-            Constraint::Percentage(50),
-        );*/
-
-        //frame.render_widget(Block::bordered().title("Right Now"), quick_stats);
         frame.render_widget(table, quick_stats);
-        render_scatter(frame, today, &self.openMeteoForecast.hourly);
+        render_temperature_scatterplot(frame, today, &self.openMeteoForecast.hourly);
     }
 
     /// Updates the application's state based on user input
