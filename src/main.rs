@@ -113,6 +113,52 @@ fn center(area: Rect, horizontal: Constraint, vertical: Constraint) -> Rect {
     area
 }
 
+
+/// Create the "Right Now" weather table
+fn create_right_now_table(forecast: &OpenMeteoForecast) -> Table {
+    let widths = [
+        Constraint::Length(15),
+        Constraint::Fill(1),
+    ];
+
+    let rows = [
+        Row::new(vec![
+            Cell::from("Current Temp:"),
+            Cell::from(Text::from(format!("{}\u{00B0}", forecast.current.temperature_2m)).right_aligned()),
+        ]),
+        Row::new(vec![
+            Cell::from("Feels Like:"),
+            Cell::from(Text::from(format!("{}\u{00B0}", forecast.current.apparent_temperature)).right_aligned()),
+        ]), 
+        Row::new(vec![
+            Cell::from("High:"),
+            Cell::from(Text::from(format!("{}", forecast.periods[0].temperature_max)).right_aligned()),
+        ]),
+        Row::new(vec![
+            Cell::from("Low:"),
+            Cell::from(Text::from(format!("{}", forecast.periods[0].temperature_min)).right_aligned()),
+        ]),
+        Row::new(vec![
+            Cell::from("Weather Summary:"),
+            Cell::from(Text::from(format!("{}", forecast.periods[0].weather)).right_aligned()),
+        ]),
+        Row::new(vec![
+            Cell::from("Chance of Rain:"),
+            Cell::from(Text::from(format!("{}%", forecast.periods[0].precipitation_probability)).right_aligned()),
+        ]),
+    ];
+
+
+    return Table::new(rows, widths).column_spacing(1)
+            .block(
+                Block::default()
+                    .borders(Borders::ALL)
+                    .padding(Padding::uniform(1))
+                    .title(Line::from("Right Now").light_blue().centered().bold())
+            );
+}
+
+
 /// Renders the scatterplot to show the temperature for the rest of the current day
 fn render_temperature_scatterplot(frame: &mut Frame, area: Rect, hourly: &Vec<OpenMeteoHourly>) {
     let mut today_hourly: [(f64, f64); 24] = [(0., 0.); 24];
@@ -165,8 +211,8 @@ fn render_temperature_scatterplot(frame: &mut Frame, area: Rect, hourly: &Vec<Op
 
 fn create_weather_card(period: &OpenMeteoPeriod) -> Table {
         let widths = [
-            Constraint::Length(35),
-            Constraint::Length(35)
+            Constraint::Length(15),
+            Constraint::Fill(1)
         ];
 
 
@@ -180,7 +226,7 @@ fn create_weather_card(period: &OpenMeteoPeriod) -> Table {
                 Cell::from(Text::from(format!("{}", period.temperature_min)).right_aligned()),
             ]),
             Row::new(vec![
-                Cell::from("Weather Summary:"),
+                Cell::from("Weather:"),
                 Cell::from(Text::from(format!("{}", period.weather)).right_aligned()),
             ]),
             Row::new(vec![
@@ -234,10 +280,7 @@ impl App {
         let current_weather = Layout::vertical([Ratio(1,2), Ratio(1,2)]);
         let [mut quick_stats, description] = current_weather.areas(current);
  
-        //let fill = Layout::horizontal([Percentage(100)]);
-        //let [full_area] = fill.areas(forecast_area)
-        
-        let outer_block = Block::bordered().title(Line::from("Upcoming Forecast").light_magenta().centered().bold());
+        let outer_block = Block::bordered().title(Line::from("4-cast").light_magenta().centered().bold());
         let inner_block = Block::bordered();
         let inner_area = outer_block.inner(forecast_area);
 
@@ -258,60 +301,19 @@ impl App {
                 )
                 , description);
 
-        let stats_widths = [
-            Constraint::Length(35),
-            Constraint::Length(35),
-        ];
-
-        let stats_rows = [
-            Row::new(vec![
-                Cell::from("Current Temp:"),//.style(styles.text_style),
-                Cell::from(Text::from(format!("{}\u{00B0}", self.openMeteoForecast.current.temperature_2m)).right_aligned()),//.style(styles.text_style),
-            ]),
-            Row::new(vec![
-                Cell::from("Feels Like:"),//.style(styles.text_style),
-                Cell::from(Text::from(format!("{}\u{00B0}", self.openMeteoForecast.current.apparent_temperature)).right_aligned()),//.style(styles.text_style),
-            ]), 
-            Row::new(vec![
-                Cell::from("High:"),
-                Cell::from(Text::from(format!("{}", self.openMeteoForecast.periods[0].temperature_max)).right_aligned()),
-            ]),
-            Row::new(vec![
-                Cell::from("Low:"),
-                Cell::from(Text::from(format!("{}", self.openMeteoForecast.periods[0].temperature_min)).right_aligned()),
-            ]),
-            Row::new(vec![
-                Cell::from("Weather Summary:"),//.style(styles.text_style),
-                Cell::from(Text::from(format!("{}", self.openMeteoForecast.periods[0].weather)).right_aligned()),//.style(styles.text_style),
-            ]),
-            Row::new(vec![
-                Cell::from("Chance of Rain:"),
-                Cell::from(Text::from(format!("{}%", self.openMeteoForecast.periods[0].precipitation_probability)).right_aligned()),
-            ]),
-        ];
-
-
-        let table = Table::new(stats_rows, stats_widths).column_spacing(1)
-                .block(
-                    Block::default()
-                        .borders(Borders::ALL)
-                        .padding(Padding::uniform(1))
-                        .title(Line::from("Right Now").light_blue().centered().bold())
-                );
-
-
-        frame.render_widget(table, quick_stats);
+        frame.render_widget(create_right_now_table(&self.openMeteoForecast), quick_stats);
         render_temperature_scatterplot(frame, today, &self.openMeteoForecast.hourly);
-
-        for i in 0..4 {
+        
+        // Populate the 4-cast
+        for i in 1..5 {
             let mut render_area: Rect = slot1;
-            if i == 1 {
+            if i == 2 {
                 render_area = slot2;
             }
-            else if i == 2 {
+            else if i == 3 {
                 render_area = slot3;
             }
-            else if i == 3 {
+            else if i == 4 {
                 render_area = slot4;
             }
             frame.render_widget(create_weather_card(&self.openMeteoForecast.periods[i]), render_area);
@@ -345,18 +347,11 @@ impl App {
 
 
 
-fn getWeatherFromCode(code: String) -> String { 
-    let weather_codes = readWeatherCodesFile();
-
-    return weather_codes[code].to_string();
-}
-
-
-
-
 /// Get the forecast for the next 7 days as well as today's weather conditions
 /// Using this API: <https://api.open-meteo.com/v1/forecast>
 async fn getOpenMeteoWeather(client: &Client) -> Result<OpenMeteoForecast, Error> {
+    let weather_codes = readWeatherCodesFile();
+
     let latitude = env::var("LATITUDE").unwrap();
     let longitude = env::var("LONGITUDE").unwrap();
     let mut timezone = env::var("TIMEZONE").unwrap().to_string();
@@ -378,7 +373,7 @@ async fn getOpenMeteoWeather(client: &Client) -> Result<OpenMeteoForecast, Error
     for i in &json.daily.time {
         periods.push(OpenMeteoPeriod {
             date: i.to_string(), 
-            weather: getWeatherFromCode(json.daily.weather_code[count].to_string()),
+            weather: weather_codes[json.daily.weather_code[count].to_string()].to_string(),
             temperature_max: format!("{}\u{00B0}", json.daily.temperature_2m_max[count].to_string()),
             temperature_min: format!("{}\u{00B0}", json.daily.temperature_2m_min[count].to_string()),
             apparent_temperature_max: format!("{}\u{00B0}", json.daily.apparent_temperature_max[count].to_string()),
@@ -394,7 +389,7 @@ async fn getOpenMeteoWeather(client: &Client) -> Result<OpenMeteoForecast, Error
         hourly.push(OpenMeteoHourly {
             datetime: i.to_string(),
             temperature: format!("{}\u{00B0}", json.hourly.temperature_2m[count].to_string()),
-            weather: getWeatherFromCode(json.hourly.weather_code[count].to_string())
+            weather: weather_codes[json.hourly.weather_code[count].to_string()].to_string()
         });
         count += 1;
     }
