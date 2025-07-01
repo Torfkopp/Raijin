@@ -163,6 +163,45 @@ fn render_temperature_scatterplot(frame: &mut Frame, area: Rect, hourly: &Vec<Op
 
 
 
+fn create_weather_card(period: &OpenMeteoPeriod) -> Table {
+        let widths = [
+            Constraint::Length(35),
+            Constraint::Length(35)
+        ];
+
+
+        let rows = [
+            Row::new(vec![
+                Cell::from("High:"),
+                Cell::from(Text::from(format!("{}", period.temperature_max)).right_aligned()),
+            ]),
+            Row::new(vec![
+                Cell::from("Low:"),
+                Cell::from(Text::from(format!("{}", period.temperature_min)).right_aligned()),
+            ]),
+            Row::new(vec![
+                Cell::from("Weather Summary:"),
+                Cell::from(Text::from(format!("{}", period.weather)).right_aligned()),
+            ]),
+            Row::new(vec![
+                Cell::from("Chance of Rain:"),
+                Cell::from(Text::from(format!("{}%", period.precipitation_probability)).right_aligned()),
+            ]),
+        ];
+
+
+        return Table::new(rows, widths).column_spacing(1)
+                .block(
+                    Block::default()
+                        .borders(Borders::ALL)
+                        .padding(Padding::uniform(1))
+                        .title(Line::from(format!("{}", period.date)).centered().bold())
+                );
+}
+
+
+
+
 #[derive(Debug, Default)]
 pub struct App {
     openMeteoForecast: OpenMeteoForecast,
@@ -194,9 +233,20 @@ impl App {
 
         let current_weather = Layout::vertical([Ratio(1,2), Ratio(1,2)]);
         let [mut quick_stats, description] = current_weather.areas(current);
+ 
+        //let fill = Layout::horizontal([Percentage(100)]);
+        //let [full_area] = fill.areas(forecast_area)
         
-        frame.render_widget(Block::bordered().title(Line::from("Upcoming Week").light_magenta().centered().bold()), forecast_area);
+        let outer_block = Block::bordered().title(Line::from("Upcoming Forecast").light_magenta().centered().bold());
+        let inner_block = Block::bordered();
+        let inner_area = outer_block.inner(forecast_area);
+
+        let upcoming_weather = Layout::horizontal([Ratio(1,4), Ratio(1,4), Ratio(1,4), Ratio(1,4)]);
+        let [slot1, slot2, slot3, slot4] = upcoming_weather.areas(inner_area);
+        
+        frame.render_widget(outer_block, forecast_area);
         frame.render_widget(Block::bordered(), icon);
+        frame.render_widget(inner_block, inner_area);
 
         frame.render_widget(
             Paragraph::new(self.todaysWeatherDescription.clone()).wrap(Wrap { trim: true }).alignment(Alignment::Center)
@@ -252,6 +302,20 @@ impl App {
 
         frame.render_widget(table, quick_stats);
         render_temperature_scatterplot(frame, today, &self.openMeteoForecast.hourly);
+
+        for i in 0..4 {
+            let mut render_area: Rect = slot1;
+            if i == 1 {
+                render_area = slot2;
+            }
+            else if i == 2 {
+                render_area = slot3;
+            }
+            else if i == 3 {
+                render_area = slot4;
+            }
+            frame.render_widget(create_weather_card(&self.openMeteoForecast.periods[i]), render_area);
+        }
     }
 
     /// Updates the application's state based on user input
