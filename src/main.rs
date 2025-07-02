@@ -16,6 +16,7 @@ use ratatui::{
     prelude::{Alignment},
     DefaultTerminal, Frame,
 };
+use chrono::{NaiveDate, Datelike};
 
 /// Single day of weather forecast
 #[derive(Serialize, Deserialize, Debug)]
@@ -154,7 +155,7 @@ fn create_right_now_table(forecast: &OpenMeteoForecast) -> Table {
                 Block::default()
                     .borders(Borders::ALL)
                     .padding(Padding::uniform(1))
-                    .title(Line::from("Right Now").light_blue().centered().bold())
+                    .title(Line::from(" Right Now ").light_blue().centered().bold())
             );
 }
 
@@ -187,7 +188,7 @@ fn render_temperature_scatterplot(frame: &mut Frame, area: Rect, hourly: &Vec<Op
             .data(&today_hourly);
 
     let chart = Chart::new(vec!(dataset))
-        .block(Block::bordered().title(Line::from("Today's Temps").cyan().centered().bold()))
+        .block(Block::bordered().title(Line::from(" Today's Temps ").cyan().centered().bold()))
         .y_axis(
             Axis::default()
                 .title("Temp (\u{00B0}F)")
@@ -236,16 +237,38 @@ fn create_weather_card(period: &OpenMeteoPeriod) -> Table {
         ];
 
 
+        let day = getDayFromDate(&period.date);
+
         return Table::new(rows, widths).column_spacing(1)
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
                         .padding(Padding::uniform(1))
-                        .title(Line::from(format!("{}", period.date)).centered().bold())
+                        .title(Line::from(format!(" ({}) {} ", day, period.date)).centered().bold())
                 );
 }
 
 
+
+/// Returns day (Monday, Tuesday, etc) for given date (YYYY-MM-DD)
+fn getDayFromDate(date: &String) -> String {
+    let date_pieces: Vec<&str> = date.split('-').collect();
+    // Parse the day, month, and year as integers
+    let year: i32 = date_pieces[0].parse().expect("Invalid year");
+    let month: u32 = date_pieces[1].parse().expect("Invalid month");
+    let day: u32 = date_pieces[2].parse().expect("Invalid day");
+
+    // Create a NaiveDate object with the provided input using from_ymd_opt
+    match NaiveDate::from_ymd_opt(year, month, day) {
+        Some(date) => {
+            return date.weekday().to_string();
+        }
+        None => {
+            println!("Invalid date provided. Please ensure the date is valid.");
+            return String::from("");
+        }
+    }
+}
 
 
 #[derive(Debug, Default)]
@@ -277,10 +300,13 @@ impl App {
         let horizontal = Layout::horizontal([Ratio(1,3), Ratio(1,3), Ratio(1,3)]);
         let [current, icon, today] = horizontal.areas(today_area);
 
+        let middle = Layout::vertical([Ratio(1,2), Ratio(1,2)]);
+        let [mid_top, mid_bottom] = middle.areas(icon);
+
         let current_weather = Layout::vertical([Ratio(1,2), Ratio(1,2)]);
         let [mut quick_stats, description] = current_weather.areas(current);
  
-        let outer_block = Block::bordered().title(Line::from("4-cast").light_magenta().centered().bold());
+        let outer_block = Block::bordered().title(Line::from(" 4-cast ").light_magenta().centered().bold());
         let inner_block = Block::bordered();
         let inner_area = outer_block.inner(forecast_area);
 
@@ -288,15 +314,27 @@ impl App {
         let [slot1, slot2, slot3, slot4] = upcoming_weather.areas(inner_area);
         
         frame.render_widget(outer_block, forecast_area);
-        frame.render_widget(Block::bordered(), icon);
         frame.render_widget(inner_block, inner_area);
+
+        frame.render_widget(Block::bordered(), mid_top);
+        frame.render_widget(Block::new(), mid_bottom);
+
+        let text = fs::read_to_string("./logo.txt").expect("Could not read in logo file");
+        frame.render_widget(
+            Paragraph::new(text).alignment(Alignment::Center)
+                .block(
+                    Block::new()
+                        .padding(Padding::new(0,0,2,0))
+                )
+                .style(Style::new().red())
+                , mid_bottom);
 
         frame.render_widget(
             Paragraph::new(self.todaysWeatherDescription.clone()).wrap(Wrap { trim: true }).alignment(Alignment::Center)
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
-                        .title(Line::from("Full Description").light_green().centered().bold())
+                        .title(Line::from(" Full Description ").light_green().centered().bold())
                         .padding(Padding::uniform(1))
                 )
                 , description);
