@@ -16,7 +16,7 @@ use ratatui::{
 };
 use chrono::{NaiveDate, Datelike};
 
-/// Single day of weather forecast
+/// Single day of weather forecast from NWS
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
 struct NwsPeriod {
@@ -65,7 +65,7 @@ struct CurrentWeatherData {
     weather_code: i32
 }
 
-/// Combination forecast including daily and today
+/// Combination forecast including daily, hourly, and current
 #[derive(Serialize, Deserialize, Debug)]
 struct OpenMeteoRawForecast {
     daily: OpenMeteoTimeAndCode,
@@ -102,7 +102,7 @@ struct OpenMeteoForecast {
     hourly: Vec<OpenMeteoHourly>
 }
 
-
+/// Moon phase data for a given date
 #[derive(Serialize, Deserialize, Debug)]
 struct MoonPhase {
     date: String,
@@ -110,7 +110,7 @@ struct MoonPhase {
     illumination: String
 }
 
-
+/// Raw phase data from ViewBits
 #[derive(Serialize, Deserialize, Debug)]
 struct RawMoonPhaseData {
     phases: Vec<MoonPhase>
@@ -280,7 +280,7 @@ fn get_day_from_date(date: &String) -> String {
 
 
 
-
+/// Application state data
 #[derive(Serialize, Debug, Default)]
 #[serde(rename_all = "camelCase")]
 struct App {
@@ -290,7 +290,7 @@ struct App {
     exit: bool
 }
 
-
+/// Main Ratatui app for Raijin
 impl App {
     /// Runs the application's main loop until the user quits
     fn run(&mut self, terminal: &mut DefaultTerminal, forecast: OpenMeteoForecast, today: String, moon_phases: Vec<MoonPhase>) -> io::Result<()> {
@@ -422,8 +422,6 @@ async fn get_open_meteo_weather(client: &Client) -> Result<OpenMeteoForecast, Er
     let mut timezone = env::var("TIMEZONE").unwrap().to_string();
     timezone = encode(&timezone).to_string();
     
-    //let mut url = format!("https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&daily=temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,weather_code,precipitation_probability_mean&current=temperature_2m,apparent_temperature,weather_code&timezone={}&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch", latitude.to_string(), longitude.to_string(), timezone);
-    
     let url = format!("https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&daily=temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,weather_code,precipitation_probability_mean&hourly=temperature_2m,weather_code&current=temperature_2m,apparent_temperature,weather_code&timezone={}&forecast_days=14&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch", latitude.to_string(), longitude.to_string(), timezone);
 
     let response = client
@@ -512,10 +510,14 @@ async fn get_moon_phases(client: &Client) -> Result<Vec<MoonPhase>, Error> {
 
 
 
+
 #[tokio::main]
 async fn main() -> io::Result<()> {
     dotenv().ok();
-
+    
+    // This is used as part of the thin authentication that the NWS API uses
+    // I'm hardcoding it because it doesn't really matter and you won't get blocked even with heavy
+    // use (I pinged this thing constantly during development and never hit a limit)
     let user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:139.0) Gecko/20100101 Firefox/139.0";
         
     let client = Client::builder()
@@ -525,7 +527,6 @@ async fn main() -> io::Result<()> {
     let moon_phases = get_moon_phases(&client).await.unwrap(); 
     let nws_periods = get_nws_weather_periods(&client).await.unwrap();
     let today = nws_periods[0].detailed_forecast.clone();
-    // Get 14 day forecast as well as today's weather info
     let open_meteo_forecast = get_open_meteo_weather(&client).await.unwrap();
 
     
