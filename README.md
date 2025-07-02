@@ -1,10 +1,20 @@
-# Raijin
+<div align="center">
+  <h1>Raijin</h1>
 
-![A screenshot of the application](https://github.com/MasonStooksbury/Raijin/blob/main/screenshot.png?raw=true)
+  <p>
+    A free, simple weather TUI that pulls data without the need for an API key, account, or subscription. Weather data is from [NWS](https://api.weather.gov/) and [OpenMeteo](https://open-meteo.com/en/docs). Moon phase data is from [ViewBits](https://viewbits.com/docs/moon-phase-api-documentation).
+  </p>
 
-A free, simple weather TUI that pulls data without the need for an API key, account, or subscription. Weather data is from [NWS](https://api.weather.gov/) and [OpenMeteo](https://open-meteo.com/en/docs). Moon phase data is from [ViewBits](https://viewbits.com/docs/moon-phase-api-documentation).
+</div>
 
-(NOTE: I'm using WezTerm with the "Gruvbox Dark (Gogh)" theme. Yours may look slightly different)
+<div align="center">
+  <img src="screenshot.png" alt="A screenshot of the application"/>
+  <p>
+  <sub>
+  (NOTE: I'm using WezTerm with the "Gruvbox Dark (Gogh)" theme. Yours may look slightly different)
+  </sub>
+  </p>
+</div>
 
 <br>
 
