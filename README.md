@@ -31,3 +31,8 @@ Now that we have the 5 pieces of data we need (latitude, longitude, 2-letter sta
 
 ## Develop
 When editing the logo.txt or any of the moon phases, make sure every line has the exact same length (even if there are just blank lines). This will ensure that it can be centered and manipulated properly by Ratatui.
+
+<br>
+
+## Why "Raijin"?
+I went googling around for mythological god names related to weather/storms. "Raijin" sounded the coolest
