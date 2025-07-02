@@ -515,17 +515,22 @@ async fn get_moon_phases(client: &Client) -> Result<Vec<MoonPhase>, Error> {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    let path: PathBuf = dirs::home_dir()
+    let folder: PathBuf = dirs::home_dir()
         .expect("Could not find home directory")
         .join(".config")
-        .join("Raijin")
-        .join(".env");
+        .join("Raijin");
 
-    if !path.exists() {
-        fs::copy(&Path::new(".env.sample"), &path)?;
+    let file = folder.join(".env");
+
+    if !folder.exists() {
+        fs::create_dir(folder)?;
     }
 
-    let _ = dotenv::from_path(&path).expect("Could not find .env file");
+    if !file.exists() {
+        fs::copy(&Path::new(".env.sample"), &file)?;
+    }
+
+    let _ = dotenv::from_path(&file).expect("Could not find .env file");
     
     // This is used as part of the thin authentication that the NWS API uses
     // I'm hardcoding it because it doesn't really matter and you won't get blocked even with heavy

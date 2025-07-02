@@ -1,6 +1,6 @@
 [package]
 name = "Raijin"
-version = "0.1.3"
+version = "0.1.4"
 edition = "2024"
 description = "A free, simple weather TUI that pulls data without the need for an API key, account, or subscription"
 readme = "README.md"
