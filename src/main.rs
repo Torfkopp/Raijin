@@ -104,6 +104,20 @@ struct OpenMeteoForecast {
 }
 
 
+#[derive(Serialize, Deserialize, Debug)]
+struct MoonPhase {
+    date: String,
+    phase: String,
+    illumination: String
+}
+
+
+#[derive(Serialize, Deserialize, Debug)]
+struct RawMoonPhaseData {
+    phases: Vec<MoonPhase>
+}
+
+
 
 /// Helper function to center a rect within another rect 
 fn center(area: Rect, horizontal: Constraint, vertical: Constraint) -> Rect {
@@ -209,7 +223,7 @@ fn render_temperature_scatterplot(frame: &mut Frame, area: Rect, hourly: &Vec<Op
 }
 
 
-
+/// Creates the cards for the 4-cast section
 fn create_weather_card(period: &OpenMeteoPeriod) -> Table {
         let widths = [
             Constraint::Length(15),
@@ -275,15 +289,17 @@ fn getDayFromDate(date: &String) -> String {
 pub struct App {
     openMeteoForecast: OpenMeteoForecast,
     todaysWeatherDescription: String,
+    moonPhases: Vec<MoonPhase>,
     exit: bool
 }
 
 
 impl App {
     /// Runs the application's main loop until the user quits
-    pub fn run(&mut self, terminal: &mut DefaultTerminal, forecast: OpenMeteoForecast, today: String) -> io::Result<()> {
+    pub fn run(&mut self, terminal: &mut DefaultTerminal, forecast: OpenMeteoForecast, today: String, moon_phases: Vec<MoonPhase>) -> io::Result<()> {
         self.openMeteoForecast = forecast;
         self.todaysWeatherDescription = today;
+        self.moonPhases = moon_phases;
         while !self.exit {
             terminal.draw(|frame| self.draw(frame))?;
             self.handle_events()?;
@@ -319,9 +335,20 @@ impl App {
         frame.render_widget(Block::bordered(), mid_top);
         frame.render_widget(Block::new(), mid_bottom);
 
-        let text = fs::read_to_string("./logo.txt").expect("Could not read in logo file");
+        // Render the current moon phase for tonight (they store the current moon phase in the
+        // third position):
+       let moon_art = fs::read_to_string(format!("./moon-phase-art/{}.txt", self.moonPhases[3].phase)).expect("Could not read in moon phase from file");
         frame.render_widget(
-            Paragraph::new(text).alignment(Alignment::Center)
+            Paragraph::new(moon_art).alignment(Alignment::Center)
+                .block(
+                    Block::new()
+                )
+                , mid_top);
+
+        // Render the logo into the middle of the screen
+        let logo = fs::read_to_string("./logo.txt").expect("Could not read in logo from file");
+        frame.render_widget(
+            Paragraph::new(logo).alignment(Alignment::Center)
                 .block(
                     Block::new()
                         .padding(Padding::new(0,0,2,0))
@@ -329,16 +356,18 @@ impl App {
                 .style(Style::new().red())
                 , mid_bottom);
 
+        // Render the day's full description into the top-left-bottom section
         frame.render_widget(
             Paragraph::new(self.todaysWeatherDescription.clone()).wrap(Wrap { trim: true }).alignment(Alignment::Center)
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
-                        .title(Line::from(" Full Description ").light_green().centered().bold())
+                        .title(Line::from(" Right Now Details ").light_green().centered().bold())
                         .padding(Padding::uniform(1))
                 )
                 , description);
 
+        // Render forecast summary details for right now
         frame.render_widget(create_right_now_table(&self.openMeteoForecast), quick_stats);
         render_temperature_scatterplot(frame, today, &self.openMeteoForecast.hourly);
         
@@ -466,13 +495,25 @@ async fn getNoaaWeatherPeriods(client: &Client) -> Result<Vec<NoaaPeriod>, Error
 }
 
 
+/// Get the phases of the moon for today and the next 3 days
+/// Using this API: <https://api.viewbits.com/v1/moonphase>
+async fn getMoonPhases(client: &Client) -> Result<Vec<MoonPhase>, Error> {
+    let url = "https://api.viewbits.com/v1/moonphase";
+    let response = client
+        .get(url)
+        .send()
+        .await?;
+
+    let moon_phases = response.json::<Vec<MoonPhase>>().await?;
+
+    return Ok(moon_phases);
+}
 
 
 
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-
     dotenv().ok();
 
     let user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:139.0) Gecko/20100101 Firefox/139.0";
@@ -481,17 +522,16 @@ async fn main() -> io::Result<()> {
         .user_agent(user_agent)
         .build().unwrap();
 
-    
-    let noaaPeriods = getNoaaWeatherPeriods(&client).await.unwrap();
-    let today = noaaPeriods[0].detailedForecast.clone();
+    let moon_phases = getMoonPhases(&client).await.unwrap(); 
+    let noaa_periods = getNoaaWeatherPeriods(&client).await.unwrap();
+    let today = noaa_periods[0].detailedForecast.clone();
     // Get 14 day forecast as well as today's weather info
-    let openMeteoForecast = getOpenMeteoWeather(&client).await.unwrap();
-    //println!("{:?}", openMeteoForecast.periods[0]);
+    let open_meteo_forecast = getOpenMeteoWeather(&client).await.unwrap();
 
     
     // Initialize the TUI
     let mut terminal = ratatui::init();
-    let app_result = App::default().run(&mut terminal, openMeteoForecast, today);
+    let app_result = App::default().run(&mut terminal, open_meteo_forecast, today, moon_phases);
     // Restore the terminal before we leave
     ratatui::restore();
     app_result
