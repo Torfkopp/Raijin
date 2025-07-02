@@ -6,7 +6,7 @@ description = "A free, simple weather TUI that pulls data without the need for a
 readme = "README.md"
 license-file = "LICENSE"
 repository = "https://github.com/MasonStooksbury/Raijin"
-categories = ["command-line-utilities", "weather"]
+categories = ["command-line-utilities"] 
 
 [dependencies]
 crossterm = "0.29.0"
