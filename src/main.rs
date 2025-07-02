@@ -342,6 +342,8 @@ impl App {
             Paragraph::new(moon_art).alignment(Alignment::Center)
                 .block(
                     Block::new()
+                        .title(Line::from(" Tonight's Moon Phase ").light_yellow().centered().bold())
+                        .padding(Padding::new(0,0,1,0))
                 )
                 , mid_top);
 
