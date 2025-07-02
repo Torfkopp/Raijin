@@ -19,7 +19,7 @@ use chrono::{NaiveDate, Datelike};
 /// Single day of weather forecast
 #[derive(Serialize, Deserialize, Debug)]
 #[serde(rename_all = "camelCase")]
-struct NoaaPeriod {
+struct NwsPeriod {
     number: i32,
     name: String,
     detailed_forecast: String
@@ -27,14 +27,14 @@ struct NoaaPeriod {
 
 /// Contains the next 7 days of morning/night weather
 #[derive(Serialize, Deserialize, Debug)]
-struct NoaaProperties {
-    periods: Vec<NoaaPeriod>
+struct NwsProperties {
+    periods: Vec<NwsPeriod>
 }
 
-/// Forecast from NOAA
+/// Forecast from NWS
 #[derive(Serialize, Deserialize, Debug)]
-struct NoaaForecast {
-    properties: NoaaProperties
+struct NwsForecast {
+    properties: NwsProperties
 }
 
 /// Daily forecast data
@@ -476,7 +476,7 @@ fn read_weather_codes_file() -> Value {
 
 /// Get the morning/night weather for the next 7 days (including today)
 /// Using this API: <https://api.weather.gov/>
-async fn get_noaa_weather_periods(client: &Client) -> Result<Vec<NoaaPeriod>, Error> {
+async fn get_nws_weather_periods(client: &Client) -> Result<Vec<NwsPeriod>, Error> {
     let state = env::var("STATE").unwrap();
     let zone = env::var("ZONE").unwrap();
     let url = format!("https://api.weather.gov/zones/{}/{}/forecast", state.to_string(), zone.to_string());
@@ -487,9 +487,9 @@ async fn get_noaa_weather_periods(client: &Client) -> Result<Vec<NoaaPeriod>, Er
         .await?;
     
     // Equivalent to:   let json: Forecast = response.json().await?;
-    let json = response.json::<NoaaForecast>().await?;
+    let json = response.json::<NwsForecast>().await?;
     
-    let periods: Vec<NoaaPeriod> = json.properties.periods;
+    let periods: Vec<NwsPeriod> = json.properties.periods;
     return Ok(periods);
 }
 
@@ -523,8 +523,8 @@ async fn main() -> io::Result<()> {
         .build().unwrap();
 
     let moon_phases = get_moon_phases(&client).await.unwrap(); 
-    let noaa_periods = get_noaa_weather_periods(&client).await.unwrap();
-    let today = noaa_periods[0].detailed_forecast.clone();
+    let nws_periods = get_nws_weather_periods(&client).await.unwrap();
+    let today = nws_periods[0].detailed_forecast.clone();
     // Get 14 day forecast as well as today's weather info
     let open_meteo_forecast = get_open_meteo_weather(&client).await.unwrap();
 

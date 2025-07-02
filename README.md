@@ -1,4 +1,7 @@
 # Raijin
+
+![A screenshot of the application](https://github.com/MasonStooksbury/Raijin/blob/main/screenshot.png?raw=true)
+
 A free, simple weather TUI that pulls data without the need for an API key, account, or subscription. Weather data is from [NWS](https://api.weather.gov/) and [OpenMeteo](https://open-meteo.com/en/docs). Moon phase data is from [ViewBits](https://viewbits.com/docs/moon-phase-api-documentation).
 
 <br>
