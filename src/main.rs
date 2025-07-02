@@ -1,18 +1,16 @@
 use reqwest::{Client, Error};
 use dotenv::dotenv;
 use serde_json::Value;
-use std::collections::HashMap;
 use serde::{Serialize, Deserialize};
 use urlencoding::encode;
 use std::{fs, io, env};
 use crossterm::event::{self, Event, KeyCode, KeyEvent, KeyEventKind};
 use ratatui::{
-    buffer::Buffer,
-    layout::{Constraint, Layout, Rect, Flex},
+    layout::{Constraint, Layout, Rect},
     style::{Stylize, Color, Style},
-    symbols::{border, Marker},
+    symbols::{Marker},
     text::{Line, Text},
-    widgets::{Block, Paragraph, Widget, Borders, Wrap, Cell, Row, Table, Padding, Axis, Chart, GraphType, Dataset},
+    widgets::{Block, Paragraph, Borders, Wrap, Cell, Row, Table, Padding, Axis, Chart, GraphType, Dataset},
     prelude::{Alignment},
     DefaultTerminal, Frame,
 };
@@ -20,10 +18,11 @@ use chrono::{NaiveDate, Datelike};
 
 /// Single day of weather forecast
 #[derive(Serialize, Deserialize, Debug)]
+#[serde(rename_all = "camelCase")]
 struct NoaaPeriod {
     number: i32,
     name: String,
-    detailedForecast: String
+    detailed_forecast: String
 }
 
 /// Contains the next 7 days of morning/night weather
@@ -119,14 +118,6 @@ struct RawMoonPhaseData {
 
 
 
-/// Helper function to center a rect within another rect 
-fn center(area: Rect, horizontal: Constraint, vertical: Constraint) -> Rect {
-    let [area] = Layout::horizontal([horizontal])
-        .flex(Flex::Center)
-        .areas(area);
-    let [area] = Layout::vertical([vertical]).flex(Flex::Center).areas(area);
-    area
-}
 
 
 /// Create the "Right Now" weather table
@@ -172,6 +163,7 @@ fn create_right_now_table(forecast: &OpenMeteoForecast) -> Table {
                     .title(Line::from(" Right Now ").light_blue().centered().bold())
             );
 }
+
 
 
 /// Renders the scatterplot to show the temperature for the rest of the current day
@@ -223,6 +215,7 @@ fn render_temperature_scatterplot(frame: &mut Frame, area: Rect, hourly: &Vec<Op
 }
 
 
+
 /// Creates the cards for the 4-cast section
 fn create_weather_card(period: &OpenMeteoPeriod) -> Table {
         let widths = [
@@ -251,13 +244,13 @@ fn create_weather_card(period: &OpenMeteoPeriod) -> Table {
         ];
 
 
-        let day = getDayFromDate(&period.date);
+        let day = get_day_from_date(&period.date);
 
         return Table::new(rows, widths).column_spacing(1)
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
-                        .padding(Padding::uniform(1))
+                        .padding(Padding::new(2,2,3,0))
                         .title(Line::from(format!(" ({}) {} ", day, period.date)).centered().bold())
                 );
 }
@@ -265,7 +258,7 @@ fn create_weather_card(period: &OpenMeteoPeriod) -> Table {
 
 
 /// Returns day (Monday, Tuesday, etc) for given date (YYYY-MM-DD)
-fn getDayFromDate(date: &String) -> String {
+fn get_day_from_date(date: &String) -> String {
     let date_pieces: Vec<&str> = date.split('-').collect();
     // Parse the day, month, and year as integers
     let year: i32 = date_pieces[0].parse().expect("Invalid year");
@@ -285,21 +278,25 @@ fn getDayFromDate(date: &String) -> String {
 }
 
 
-#[derive(Debug, Default)]
-pub struct App {
-    openMeteoForecast: OpenMeteoForecast,
-    todaysWeatherDescription: String,
-    moonPhases: Vec<MoonPhase>,
+
+
+
+#[derive(Serialize, Debug, Default)]
+#[serde(rename_all = "camelCase")]
+struct App {
+    open_meteo_forecast: OpenMeteoForecast,
+    todays_weather_description: String,
+    moon_phases: Vec<MoonPhase>,
     exit: bool
 }
 
 
 impl App {
     /// Runs the application's main loop until the user quits
-    pub fn run(&mut self, terminal: &mut DefaultTerminal, forecast: OpenMeteoForecast, today: String, moon_phases: Vec<MoonPhase>) -> io::Result<()> {
-        self.openMeteoForecast = forecast;
-        self.todaysWeatherDescription = today;
-        self.moonPhases = moon_phases;
+    fn run(&mut self, terminal: &mut DefaultTerminal, forecast: OpenMeteoForecast, today: String, moon_phases: Vec<MoonPhase>) -> io::Result<()> {
+        self.open_meteo_forecast = forecast;
+        self.todays_weather_description = today;
+        self.moon_phases = moon_phases;
         while !self.exit {
             terminal.draw(|frame| self.draw(frame))?;
             self.handle_events()?;
@@ -308,7 +305,7 @@ impl App {
     }
 
     fn draw(&self, frame: &mut Frame) {
-        use Constraint::{Fill, Length, Min, Percentage, Ratio};
+        use Constraint::{Percentage, Ratio};
 
         let vertical = Layout::vertical([Percentage(50), Percentage(50)]);
         let [today_area, forecast_area] = vertical.areas(frame.area());
@@ -320,9 +317,9 @@ impl App {
         let [mid_top, mid_bottom] = middle.areas(icon);
 
         let current_weather = Layout::vertical([Ratio(1,2), Ratio(1,2)]);
-        let [mut quick_stats, description] = current_weather.areas(current);
+        let [quick_stats, description] = current_weather.areas(current);
  
-        let outer_block = Block::bordered().title(Line::from(" 4-cast ").light_magenta().centered().bold());
+        let outer_block = Block::bordered().title(Line::from(" 4-cast ").light_magenta().centered().bold()).padding(Padding::new(0,0,1,0));
         let inner_block = Block::bordered();
         let inner_area = outer_block.inner(forecast_area);
 
@@ -337,13 +334,12 @@ impl App {
 
         // Render the current moon phase for tonight (they store the current moon phase in the
         // third position):
-       let moon_art = fs::read_to_string(format!("./moon-phase-art/{}.txt", self.moonPhases[3].phase)).expect("Could not read in moon phase from file");
+       let moon_art = fs::read_to_string(format!("./moon-phase-art/{}.txt", self.moon_phases[3].phase)).expect("Could not read in moon phase from file");
         frame.render_widget(
             Paragraph::new(moon_art).alignment(Alignment::Center)
                 .block(
                     Block::new()
                         .title(Line::from(" Tonight's Moon Phase ").light_yellow().centered().bold())
-                        .padding(Padding::new(0,0,1,0))
                 )
                 , mid_top);
 
@@ -360,7 +356,7 @@ impl App {
 
         // Render the day's full description into the top-left-bottom section
         frame.render_widget(
-            Paragraph::new(self.todaysWeatherDescription.clone()).wrap(Wrap { trim: true }).alignment(Alignment::Center)
+            Paragraph::new(self.todays_weather_description.clone()).wrap(Wrap { trim: true }).alignment(Alignment::Center)
                 .block(
                     Block::default()
                         .borders(Borders::ALL)
@@ -370,8 +366,8 @@ impl App {
                 , description);
 
         // Render forecast summary details for right now
-        frame.render_widget(create_right_now_table(&self.openMeteoForecast), quick_stats);
-        render_temperature_scatterplot(frame, today, &self.openMeteoForecast.hourly);
+        frame.render_widget(create_right_now_table(&self.open_meteo_forecast), quick_stats);
+        render_temperature_scatterplot(frame, today, &self.open_meteo_forecast.hourly);
         
         // Populate the 4-cast
         for i in 1..5 {
@@ -385,7 +381,7 @@ impl App {
             else if i == 4 {
                 render_area = slot4;
             }
-            frame.render_widget(create_weather_card(&self.openMeteoForecast.periods[i]), render_area);
+            frame.render_widget(create_weather_card(&self.open_meteo_forecast.periods[i]), render_area);
         }
     }
 
@@ -418,8 +414,8 @@ impl App {
 
 /// Get the forecast for the next 7 days as well as today's weather conditions
 /// Using this API: <https://api.open-meteo.com/v1/forecast>
-async fn getOpenMeteoWeather(client: &Client) -> Result<OpenMeteoForecast, Error> {
-    let weather_codes = readWeatherCodesFile();
+async fn get_open_meteo_weather(client: &Client) -> Result<OpenMeteoForecast, Error> {
+    let weather_codes = read_weather_codes_file();
 
     let latitude = env::var("LATITUDE").unwrap();
     let longitude = env::var("LONGITUDE").unwrap();
@@ -428,7 +424,7 @@ async fn getOpenMeteoWeather(client: &Client) -> Result<OpenMeteoForecast, Error
     
     //let mut url = format!("https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&daily=temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,weather_code,precipitation_probability_mean&current=temperature_2m,apparent_temperature,weather_code&timezone={}&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch", latitude.to_string(), longitude.to_string(), timezone);
     
-    let mut url = format!("https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&daily=temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,weather_code,precipitation_probability_mean&hourly=temperature_2m,weather_code&current=temperature_2m,apparent_temperature,weather_code&timezone={}&forecast_days=14&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch", latitude.to_string(), longitude.to_string(), timezone);
+    let url = format!("https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&daily=temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,weather_code,precipitation_probability_mean&hourly=temperature_2m,weather_code&current=temperature_2m,apparent_temperature,weather_code&timezone={}&forecast_days=14&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch", latitude.to_string(), longitude.to_string(), timezone);
 
     let response = client
         .get(url)
@@ -469,7 +465,7 @@ async fn getOpenMeteoWeather(client: &Client) -> Result<OpenMeteoForecast, Error
 
 /// Read in the JSON file storing weather codes and associated condition
 /// Taken from: <https://open-meteo.com/en/docs#weather_variable_documentation>
-fn readWeatherCodesFile() -> Value {
+fn read_weather_codes_file() -> Value {
     let data = fs::read_to_string("./weather-codes.json").expect("Error reading in weather codes file");
     let json: serde_json::Value = serde_json::from_str(&data).expect("JSON was malformed");
 
@@ -477,9 +473,10 @@ fn readWeatherCodesFile() -> Value {
 }
 
 
+
 /// Get the morning/night weather for the next 7 days (including today)
 /// Using this API: <https://api.weather.gov/>
-async fn getNoaaWeatherPeriods(client: &Client) -> Result<Vec<NoaaPeriod>, Error> {
+async fn get_noaa_weather_periods(client: &Client) -> Result<Vec<NoaaPeriod>, Error> {
     let state = env::var("STATE").unwrap();
     let zone = env::var("ZONE").unwrap();
     let url = format!("https://api.weather.gov/zones/{}/{}/forecast", state.to_string(), zone.to_string());
@@ -497,9 +494,10 @@ async fn getNoaaWeatherPeriods(client: &Client) -> Result<Vec<NoaaPeriod>, Error
 }
 
 
+
 /// Get the phases of the moon for today and the next 3 days
 /// Using this API: <https://api.viewbits.com/v1/moonphase>
-async fn getMoonPhases(client: &Client) -> Result<Vec<MoonPhase>, Error> {
+async fn get_moon_phases(client: &Client) -> Result<Vec<MoonPhase>, Error> {
     let url = "https://api.viewbits.com/v1/moonphase";
     let response = client
         .get(url)
@@ -524,11 +522,11 @@ async fn main() -> io::Result<()> {
         .user_agent(user_agent)
         .build().unwrap();
 
-    let moon_phases = getMoonPhases(&client).await.unwrap(); 
-    let noaa_periods = getNoaaWeatherPeriods(&client).await.unwrap();
-    let today = noaa_periods[0].detailedForecast.clone();
+    let moon_phases = get_moon_phases(&client).await.unwrap(); 
+    let noaa_periods = get_noaa_weather_periods(&client).await.unwrap();
+    let today = noaa_periods[0].detailed_forecast.clone();
     // Get 14 day forecast as well as today's weather info
-    let open_meteo_forecast = getOpenMeteoWeather(&client).await.unwrap();
+    let open_meteo_forecast = get_open_meteo_weather(&client).await.unwrap();
 
     
     // Initialize the TUI
