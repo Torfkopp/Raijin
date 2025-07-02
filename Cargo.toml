@@ -1,7 +1,12 @@
 [package]
 name = "Raijin"
 version = "0.1.0"
-edition = "2024"
+edition = "2025"
+description = "A free, simple weather TUI that pulls data without the need for an API key, account, or subscription"
+readme = "README.md"
+license-file = "LICENSE"
+repository = "https://github.com/MasonStooksbury/Raijin"
+categories = ["command-line-utilities", "weather"]
 
 [dependencies]
 crossterm = "0.29.0"
