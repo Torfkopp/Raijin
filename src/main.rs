@@ -1,5 +1,5 @@
 use reqwest::{Client, Error};
-use dotenv::dotenv;
+use dotenv;
 use serde_json::Value;
 use serde::{Serialize, Deserialize};
 use urlencoding::encode;
@@ -15,6 +15,8 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 use chrono::{NaiveDate, Datelike};
+use std::path::{Path, PathBuf};
+use dirs;
 
 /// Single day of weather forecast from NWS
 #[derive(Serialize, Deserialize, Debug)]
@@ -513,7 +515,17 @@ async fn get_moon_phases(client: &Client) -> Result<Vec<MoonPhase>, Error> {
 
 #[tokio::main]
 async fn main() -> io::Result<()> {
-    dotenv().ok();
+    let path: PathBuf = dirs::home_dir()
+        .expect("Could not find home directory")
+        .join(".config")
+        .join("Raijin")
+        .join(".env");
+
+    if !path.exists() {
+        fs::copy(&Path::new(".env.sample"), &path)?;
+    }
+
+    let _ = dotenv::from_path(&path).expect("Could not find .env file");
     
     // This is used as part of the thin authentication that the NWS API uses
     // I'm hardcoding it because it doesn't really matter and you won't get blocked even with heavy

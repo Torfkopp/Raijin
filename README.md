@@ -1,10 +1,10 @@
 <div align="center">
   <h1>Raijin</h1>
 
-<br>
+<br />
 
   <p>
-    A free, simple weather TUI that pulls data without the need for an API key, account, or subscription. Weather data is from <a href="https://api.weather.gov/">NWS</a> and <a href="https://open-meteo.com/en/docs">OpenMeteo</a>. Moon phase data is from <a href="https://viewbits.com/docs/moon-phase-api-documentation">ViewBits</a>.
+    A free, simple weather TUI that pulls data without the need for an API key, account, or subscription. Weather data is from <a href="https://api.weather.gov/">NWS</a> and <a href="https://open-meteo.com/en/docs">OpenMeteo</a>. Moon phase data is from <a href="https://viewbits.com/docs/moon-phase-api-documentation">ViewBits</a>. <br /> Only supports Linux at the moment.
   </p>
 
 </div>
@@ -17,6 +17,18 @@
   </sub>
   </p>
 </div>
+
+<br>
+
+## Installation
+
+### Cargo
+
+Installation via `cargo` can be done by installing the [Raijin](https://crates.io/crates/Raijin) crate:
+```bash
+cargo install Raijin
+```
+`NOTE: The default location is Knoxville, TN. If you'd like to change it, continue on to the Configuration section below`
 
 <br>
 
@@ -36,8 +48,8 @@ Next, you need to figure out what timezone you're in and its IANA name
 - Once a timezone pops up, click the green `Copy` button for that result to copy the timezone to your clipboard
 
 Now that we have the 5 pieces of data we need (latitude, longitude, 2-letter state code, weather zone ID, and timezone), let's put them into an environment file
-- Create a copy or rename the `.env.sample` file to `.env`
-- Fill in the appropriate fields with the data you collected (make sure they have double-quotes around them like in the example)
+- Navigate to `~/.config/Raijin/.env` on your machine
+- Edit this file and update it with the fields you collected (make sure they have double-quotes around them like in the example)
 
 <br>
 
