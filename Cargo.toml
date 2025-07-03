@@ -1,10 +1,10 @@
 [package]
 name = "Raijin"
-version = "0.1.6"
+version = "0.1.7"
 edition = "2024"
 description = "A free, simple weather TUI that pulls data without the need for an API key, account, or subscription"
 readme = "README.md"
-license-file = "LICENSE"
+license = "MIT"
 repository = "https://github.com/MasonStooksbury/Raijin"
 categories = ["command-line-utilities"] 
 
