@@ -1,4 +1,3 @@
-use reqwest::{Client, Error};
 use dotenv;
 use serde_json::Value;
 use serde::{Serialize, Deserialize};
@@ -15,8 +14,10 @@ use ratatui::{
     DefaultTerminal, Frame,
 };
 use chrono::{NaiveDate, Datelike};
-use std::path::{Path, PathBuf};
+use std::path::{PathBuf};
 use dirs;
+use ureq::Agent;
+
 
 /// Single day of weather forecast from NWS
 #[derive(Serialize, Deserialize, Debug)]
@@ -416,7 +417,7 @@ impl App {
 
 /// Get the forecast for the next 7 days as well as today's weather conditions
 /// Using this API: <https://api.open-meteo.com/v1/forecast>
-async fn get_open_meteo_weather(client: &Client) -> Result<OpenMeteoForecast, Error> {
+fn get_open_meteo_weather(agent: &Agent) -> Result<OpenMeteoForecast, ureq::Error> {
     let weather_codes = read_weather_codes_file();
 
     let latitude = env::var("LATITUDE").unwrap();
@@ -426,12 +427,10 @@ async fn get_open_meteo_weather(client: &Client) -> Result<OpenMeteoForecast, Er
     
     let url = format!("https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&daily=temperature_2m_max,temperature_2m_min,apparent_temperature_max,apparent_temperature_min,weather_code,precipitation_probability_mean&hourly=temperature_2m,weather_code&current=temperature_2m,apparent_temperature,weather_code&timezone={}&forecast_days=14&wind_speed_unit=mph&temperature_unit=fahrenheit&precipitation_unit=inch", latitude.to_string(), longitude.to_string(), timezone);
 
-    let response = client
-        .get(url)
-        .send()
-        .await?;
-
-    let json = response.json::<OpenMeteoRawForecast>().await?;
+    let json = agent.get(url)
+        .call()?
+        .body_mut()
+        .read_json::<OpenMeteoRawForecast>()?;
 
     let mut periods: Vec<OpenMeteoPeriod> = Vec::new();
     let mut count: usize = 0;
@@ -476,35 +475,29 @@ fn read_weather_codes_file() -> Value {
 
 /// Get the morning/night weather for the next 7 days (including today)
 /// Using this API: <https://api.weather.gov/>
-async fn get_nws_weather_periods(client: &Client) -> Result<Vec<NwsPeriod>, Error> {
+fn get_nws_weather_periods(agent: &Agent) -> Result<Vec<NwsPeriod>, ureq::Error> {
     let state = env::var("STATE").unwrap();
     let zone = env::var("ZONE").unwrap();
     let url = format!("https://api.weather.gov/zones/{}/{}/forecast", state.to_string(), zone.to_string());
     
-    let response = client
-        .get(url)
-        .send()
-        .await?;
+    let response = agent.get(url)
+        .call()?
+        .body_mut()
+        .read_json::<NwsForecast>()?;
     
-    // Equivalent to:   let json: Forecast = response.json().await?;
-    let json = response.json::<NwsForecast>().await?;
-    
-    let periods: Vec<NwsPeriod> = json.properties.periods;
-    return Ok(periods);
+    return Ok(response.properties.periods);
 }
 
 
 
 /// Get the phases of the moon for today and the next 3 days
 /// Using this API: <https://api.viewbits.com/v1/moonphase>
-async fn get_moon_phases(client: &Client) -> Result<Vec<MoonPhase>, Error> {
-    let url = "https://api.viewbits.com/v1/moonphase";
-    let response = client
-        .get(url)
-        .send()
-        .await?;
-
-    let moon_phases = response.json::<Vec<MoonPhase>>().await?;
+fn get_moon_phases(agent: &Agent, date: String) -> Result<Vec<MoonPhase>, ureq::Error> {
+    let url = format!("https://api.viewbits.com/v1/moonphase?startdate={}", date);
+    let moon_phases = agent.get(url)
+        .call()?
+        .body_mut()
+        .read_json::<Vec<MoonPhase>>()?;
 
     return Ok(moon_phases);
 }
@@ -513,8 +506,7 @@ async fn get_moon_phases(client: &Client) -> Result<Vec<MoonPhase>, Error> {
 
 
 
-#[tokio::main]
-async fn main() -> io::Result<()> {
+fn main() -> io::Result<()> {
     let folder: PathBuf = dirs::home_dir()
         .expect("Could not find home directory")
         .join(".config")
@@ -527,7 +519,7 @@ async fn main() -> io::Result<()> {
     }
 
     if !file.exists() {
-        fs::copy(&Path::new(".env.sample"), &file)?;
+        fs::write(&file, "ZONE=\"TNZ069\"\nSTATE=\"TN\"\nLATITUDE=\"35.9626444\"\nLONGITUDE=\"-83.9167239\"\nTIMEZONE=\"America/New_York\"\n")?;
     }
 
     let _ = dotenv::from_path(&file).expect("Could not find .env file");
@@ -536,16 +528,18 @@ async fn main() -> io::Result<()> {
     // I'm hardcoding it because it doesn't really matter and you won't get blocked even with heavy
     // use (I pinged this thing constantly during development and never hit a limit)
     let user_agent = "Mozilla/5.0 (X11; Linux x86_64; rv:139.0) Gecko/20100101 Firefox/139.0";
-        
-    let client = Client::builder()
+
+    let config = Agent::config_builder()
         .user_agent(user_agent)
-        .build().unwrap();
+        .timeout_global(Some(std::time::Duration::from_secs(20)))
+        .build();
 
-    let moon_phases = get_moon_phases(&client).await.unwrap(); 
-    let nws_periods = get_nws_weather_periods(&client).await.unwrap();
+    let agent = Agent::new_with_config(config);
+        
+    let nws_periods = get_nws_weather_periods(&agent).unwrap();
     let today = nws_periods[0].detailed_forecast.clone();
-    let open_meteo_forecast = get_open_meteo_weather(&client).await.unwrap();
-
+    let open_meteo_forecast = get_open_meteo_weather(&agent).unwrap();
+    let moon_phases = get_moon_phases(&agent, open_meteo_forecast.periods[0].date.clone()).unwrap(); 
     
     // Initialize the TUI
     let mut terminal = ratatui::init();
