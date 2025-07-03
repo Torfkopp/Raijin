@@ -4,7 +4,7 @@
 <br />
 
   <p>
-    A free, simple weather TUI that pulls data without the need for an API key, account, or subscription. Weather data is from <a href="https://api.weather.gov/">NWS</a> and <a href="https://open-meteo.com/en/docs">OpenMeteo</a>. Moon phase data is from <a href="https://viewbits.com/docs/moon-phase-api-documentation">ViewBits</a>. <br /> Only supports Linux at the moment.
+    A free, simple weather TUI that pulls data without the need for an API key, account, or subscription. Weather data is from <a href="https://api.weather.gov/">NWS</a> and <a href="https://open-meteo.com/en/docs">OpenMeteo</a>. Moon phase data is from <a href="https://viewbits.com/docs/moon-phase-api-documentation">ViewBits</a>. <br /> Only supports Mac and Linux at the moment.
   </p>
 
 </div>
@@ -36,7 +36,7 @@ cargo install Raijin
 
 Once you've completed the instructions below, run by typing `Raijin` in your terminal
 
-First, you'll need to get some data about your location (namely, your latitude and longitude)
+First, you'll need to get some data about your location (namely, your latitude, longitude, and weather zone ID)
 - Navigate to the [NWS](https://www.weather.gov/) website
 - Type in your location in the top left search bar and click `Go`
 - Once the page has loaded, look up at the URL search bar at the top of your browser and jot down the latitude and longitude for this location
@@ -65,7 +65,8 @@ I did this project over the course of a week to continue sharpening my Rust skil
 
 - Use [clap](https://crates.io/crates/clap) to add command-line parsing. (This would make it easier to view `help` documentation. As well as provide a way to change the config file arguments without having to edit a file directly. Not a huge deal, but would be nice to have)
 - Tidy up the code. (I am by no means a great Rust programmer and I'm sure I've done a lot that isn't very idiomatic. <sub>You know, like naming my crate with a capital letter? lol</sub>)
-- Rework config file setup. (Right now the way I create a config file for this is pretty lazy by just looking under `~/.config` and creating a file. But this can break if people have this symlinked for dotfile stuff. I'm sure there's a more robust way to do this) 
+- Rework config file setup. (Right now the way I create a config file for this is pretty lazy by just looking under `~/.config` and creating a file. But this can break if people have this symlinked for dotfile stuff. I'm sure there's a more robust way to do this)
+- Test on Windows/add Windows support if it doesn't work (it should, I just haven't tested it yet)
 
 <br>
 
