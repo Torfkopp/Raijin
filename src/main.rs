@@ -1,5 +1,4 @@
 use dotenv;
-use serde_json::Value;
 use serde::{Serialize, Deserialize};
 use urlencoding::encode;
 use std::{fs, io, env};
@@ -17,7 +16,9 @@ use chrono::{NaiveDate, Datelike};
 use std::path::{PathBuf};
 use dirs;
 use ureq::Agent;
+use include_dir::{include_dir, Dir};
 
+static MOON_PHASE_ART_DIR: Dir<'_> = include_dir!("$CARGO_MANIFEST_DIR/moon-phase-art");
 
 /// Single day of weather forecast from NWS
 #[derive(Serialize, Deserialize, Debug)]
@@ -289,17 +290,17 @@ fn get_day_from_date(date: &String) -> String {
 struct App {
     open_meteo_forecast: OpenMeteoForecast,
     todays_weather_description: String,
-    moon_phases: Vec<MoonPhase>,
+    moon_phase_art: String,
     exit: bool
 }
 
 /// Main Ratatui app for Raijin
 impl App {
     /// Runs the application's main loop until the user quits
-    fn run(&mut self, terminal: &mut DefaultTerminal, forecast: OpenMeteoForecast, today: String, moon_phases: Vec<MoonPhase>) -> io::Result<()> {
+    fn run(&mut self, terminal: &mut DefaultTerminal, forecast: OpenMeteoForecast, today: String, moon_phase_art: String) -> io::Result<()> {
         self.open_meteo_forecast = forecast;
         self.todays_weather_description = today;
-        self.moon_phases = moon_phases;
+        self.moon_phase_art = moon_phase_art;
         while !self.exit {
             terminal.draw(|frame| self.draw(frame))?;
             self.handle_events()?;
@@ -337,9 +338,8 @@ impl App {
 
         // Render the current moon phase for tonight (they store the current moon phase in the
         // third position):
-       let moon_art = fs::read_to_string(format!("./moon-phase-art/{}.txt", self.moon_phases[3].phase)).expect("Could not read in moon phase from file");
         frame.render_widget(
-            Paragraph::new(moon_art).alignment(Alignment::Center)
+            Paragraph::new(self.moon_phase_art.clone()).alignment(Alignment::Center)
                 .block(
                     Block::new()
                         .title(Line::from(" Tonight's Moon Phase ").light_yellow().centered().bold())
@@ -347,7 +347,7 @@ impl App {
                 , mid_top);
 
         // Render the logo into the middle of the screen
-        let logo = fs::read_to_string("./logo.txt").expect("Could not read in logo from file");
+        let logo = include_str!("./logo.txt");
         frame.render_widget(
             Paragraph::new(logo).alignment(Alignment::Center)
                 .block(
@@ -417,9 +417,7 @@ impl App {
 
 /// Get the forecast for the next 7 days as well as today's weather conditions
 /// Using this API: <https://api.open-meteo.com/v1/forecast>
-fn get_open_meteo_weather(agent: &Agent) -> Result<OpenMeteoForecast, ureq::Error> {
-    let weather_codes = read_weather_codes_file();
-
+fn get_open_meteo_weather(agent: &Agent, weather_codes: serde_json::Value) -> Result<OpenMeteoForecast, ureq::Error> {
     let latitude = env::var("LATITUDE").unwrap();
     let longitude = env::var("LONGITUDE").unwrap();
     let mut timezone = env::var("TIMEZONE").unwrap().to_string();
@@ -459,16 +457,6 @@ fn get_open_meteo_weather(agent: &Agent) -> Result<OpenMeteoForecast, ureq::Erro
     }
 
     return Ok(OpenMeteoForecast{periods: periods, current: json.current, hourly: hourly});
-}
-
-
-/// Read in the JSON file storing weather codes and associated condition
-/// Taken from: <https://open-meteo.com/en/docs#weather_variable_documentation>
-fn read_weather_codes_file() -> Value {
-    let data = fs::read_to_string("./weather-codes.json").expect("Error reading in weather codes file");
-    let json: serde_json::Value = serde_json::from_str(&data).expect("JSON was malformed");
-
-    return json;
 }
 
 
@@ -523,7 +511,10 @@ fn main() -> io::Result<()> {
     }
 
     let _ = dotenv::from_path(&file).expect("Could not find .env file");
-    
+
+    let data = include_str!("./weather-codes.json");
+    let weather_codes: serde_json::Value = serde_json::from_str(&data).expect("JSON was malformed");
+
     // This is used as part of the thin authentication that the NWS API uses
     // I'm hardcoding it because it doesn't really matter and you won't get blocked even with heavy
     // use (I pinged this thing constantly during development and never hit a limit)
@@ -538,12 +529,15 @@ fn main() -> io::Result<()> {
         
     let nws_periods = get_nws_weather_periods(&agent).unwrap();
     let today = nws_periods[0].detailed_forecast.clone();
-    let open_meteo_forecast = get_open_meteo_weather(&agent).unwrap();
-    let moon_phases = get_moon_phases(&agent, open_meteo_forecast.periods[0].date.clone()).unwrap(); 
+    let open_meteo_forecast = get_open_meteo_weather(&agent, weather_codes).unwrap();
+    let all_moon_phases = get_moon_phases(&agent, open_meteo_forecast.periods[0].date.clone()).unwrap(); 
+
+    let thing = MOON_PHASE_ART_DIR.get_file(format!("{}.txt", all_moon_phases[3].phase)).unwrap();
+    let moon_phase_art = thing.contents_utf8().unwrap();
     
     // Initialize the TUI
     let mut terminal = ratatui::init();
-    let app_result = App::default().run(&mut terminal, open_meteo_forecast, today, moon_phases);
+    let app_result = App::default().run(&mut terminal, open_meteo_forecast, today, moon_phase_art.to_string());
     // Restore the terminal before we leave
     ratatui::restore();
     app_result
